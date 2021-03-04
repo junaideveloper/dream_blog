@@ -4,8 +4,8 @@ from .forms import EmailPostForm,CommantForm
 
 from . models import Post
 from django.core.mail import send_mail
-
-
+from taggit.models import Tag
+from django.db.models import Count
 
 def post_detail(request, year, month, day, post):
 
@@ -27,13 +27,21 @@ def post_detail(request, year, month, day, post):
 
     else:
         comment_form = CommantForm()
+    post_tags_ids = post.tags.values_list('id', flat=True)
+    similar_posts = Post.published.filter(tags__in=post_tags_ids).exclude(id=post.id)
+    similar_posts = similar_posts.annotate(same_tags=Count('tags')).order_by('-same_tags', '-publish')[:4]
+    return render(request, 'blog/post/detail.html', {'post': post,'comments':comments,'new_comment': new_comment,'comment_form': comment_form,'similar_posts': similar_posts})
 
-    return render(request, 'blog/post/detail.html', {'post': post,'comments':comments,'new_comment': new_comment,'comment_form': comment_form})
 
-
-def post_list(request):
+def post_list(request,tag_slug=None):
 
     object_list = Post.published.all()
+    tag = None
+    if tag_slug:
+        tag = get_object_or_404(Tag, slug=tag_slug)
+        object_list = object_list.filter(tags__in=[tag])
+
+
     paginator = Paginator(object_list, 3) # 3 posts in each page
     page = request.GET.get('page')
     try:
@@ -44,7 +52,7 @@ def post_list(request):
     except EmptyPage:
         # If page is out of range deliver last page of results
         posts = paginator.page(paginator.num_pages)
-    return render(request, 'blog/post/list.html', {'page': page, 'posts': posts})
+    return render(request, 'blog/post/list.html', {'page': page, 'posts': posts,'tag': tag})
 
 
 def post_share(request,post_id):
